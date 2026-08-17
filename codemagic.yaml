@@ -1,0 +1,60 @@
+workflows:
+  kernel-panic-mimic:
+    name: Kernel Panic Mimic
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      # Set these in Codemagic > App settings > Environment variables (mark TEAM_ID/BUNDLE_ID as non-secret,
+      # keep any API keys/certs secret). Values below are placeholders — replace with your own.
+      vars:
+        TEAM_ID: "YOUR_APPLE_TEAM_ID"
+        BUNDLE_ID: "com.crmexpertsonline.kernelpanicmimic"
+        XCODE_SCHEME: "KernelPanicMimic"
+        XCODE_WORKSPACE: "KernelPanicMimic.xcodeproj"
+      xcode: latest
+      # Manual signing: add your certificate + provisioning profile in
+      # Codemagic > Team settings > Code signing identities, then reference the
+      # profile name here, OR switch to ios_signing with automatic App Store Connect API key auth.
+      ios_signing:
+        provisioning_profiles:
+          - kernel_panic_mimic_profile   # name you gave the profile when uploading to Codemagic
+        certificates:
+          - kernel_panic_mimic_cert      # name you gave the .p12 certificate when uploading
+
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        script: |
+          cd $CM_BUILD_DIR
+          xcodegen generate
+
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_ADHOC \
+            --create || true
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Build IPA
+        script: |
+          cd $CM_BUILD_DIR
+          xcode-project build-ipa \
+            --project "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
