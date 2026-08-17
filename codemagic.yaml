@@ -1,0 +1,47 @@
+workflows:
+  kernel-panic-mimic:
+    name: Kernel Panic Mimic
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        XCODE_SCHEME: "KernelPanicMimic"
+        XCODE_PROJECT: "KernelPanicMimic.xcodeproj"
+      xcode: latest
+
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        script: |
+          cd $CM_BUILD_DIR
+          xcodegen generate
+
+      - name: Archive app (unsigned)
+        script: |
+          cd $CM_BUILD_DIR
+          xcodebuild archive \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -archivePath "$CM_BUILD_DIR/build/KernelPanicMimic.xcarchive" \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned IPA
+        script: |
+          cd $CM_BUILD_DIR
+          mkdir -p build/Payload
+          cp -r "build/KernelPanicMimic.xcarchive/Products/Applications/KernelPanicMimic.app" build/Payload/
+          cd build
+          zip -r -q KernelPanicMimic.ipa Payload
+          cd ..
+          mkdir -p build/ios/ipa
+          mv build/KernelPanicMimic.ipa build/ios/ipa/
+
+    artifacts:
+      - build/ios/ipa/*.ipa
